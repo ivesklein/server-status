@@ -9,10 +9,11 @@
         .container { max-width: 1200px; margin: 0 auto; }
         .header { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .status-list { display: flex; flex-direction: column; gap: 15px; }
-        .server-row { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; }
+        .server-row { background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; }
+        .server-favicon { width: 20px; height: 20px; margin: 0 15px; flex-shrink: 0; }
         .server-info { flex: 1; display: flex; gap: 40px; }
         .server-col { flex: 1; }
-        .server-chart { width: 300px; height: 80px; margin-left: 20px; }
+        .server-chart { width: 300px; height: 70px; margin-left: 20px; }
         .status-up { border-left: 4px solid #4CAF50; }
         .status-down { border-left: 4px solid #f44336; }
         .status-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
@@ -71,6 +72,7 @@
                 const list = document.getElementById('status-list');
                 list.innerHTML = servers.map(server => `
                     <div class="server-row ${server.status.status ? 'status-up' : 'status-down'}">
+                        <img src="https://${new URL(server.url).hostname}/favicon.ico" class="server-favicon" alt="favicon">
                         <div class="server-info">
                             <div class="server-col">
                                 <h3 style="margin: 0 0 10px 0;">${server.name}</h3>
@@ -82,7 +84,7 @@
                             </div>
                         </div>
                         <div class="server-chart">
-                            <canvas id="chart-${server.id}" width="300" height="80"></canvas>
+                            <canvas id="chart-${server.id}" width="300" height="70"></canvas>
                         </div>
                     </div>
                 `).join('');
@@ -167,12 +169,12 @@
         async function loadCharts() {
             const servers = await (await fetch(`${API_BASE}/status`)).json();
             const allHistory = [];
-            const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000);
+            const threeHoursAgo = Date.now() - (3 * 60 * 60 * 1000);
             
-            // Load and filter history data to last 30 minutes
+            // Load and filter history data to last 3 hours
             for (const server of servers) {
                 const history = await (await fetch(`${API_BASE}/history/${server.id}`)).json();
-                const filtered = history.filter(h => new Date(h.timestamp).getTime() >= thirtyMinutesAgo);
+                const filtered = history.filter(h => new Date(h.timestamp).getTime() >= threeHoursAgo);
                 allHistory.push({ serverId: server.id, data: filtered });
             }
             
@@ -181,7 +183,7 @@
             
             // Draw all charts with consistent scaling and time range
             for (const { serverId, data } of allHistory) {
-                drawChart(serverId, data, globalMax, thirtyMinutesAgo);
+                drawChart(serverId, data, globalMax, threeHoursAgo);
             }
         }
         
@@ -200,7 +202,25 @@
             const minTime = 0;
             const maxTime = globalMax || Math.max(...data.map(d => d.responseTime));
             const range = maxTime - minTime || 1;
-            const timeRange = 30 * 60 * 1000; // 30 minutes
+            const timeRange = 3 * 60 * 60 * 1000; // 3 hours
+            
+            // Draw grid
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = 1;
+            for (let i = 1; i < 4; i++) {
+                const y = (i / 4) * height;
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+                ctx.stroke();
+            }
+            for (let i = 1; i < 6; i++) {
+                const x = (i / 6) * width;
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+                ctx.stroke();
+            }
             
             ctx.strokeStyle = '#2196F3';
             ctx.lineWidth = 2;
