@@ -3,27 +3,16 @@ const { DynamoDBDocumentClient, ScanCommand, PutCommand, DeleteCommand, QueryCom
 const { v4: uuidv4 } = require('uuid');
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'change-me-in-production';
 
 const client = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(client);
 
 exports.handler = async (event) => {
     const { httpMethod, path, pathParameters, body, headers } = event;
-    
-    console.log('Request:', { httpMethod, path, headers: Object.keys(headers) });
-    
     const authHeader = headers.Authorization || headers.authorization || headers['Authorization'] || headers['authorization'];
     const token = authHeader?.replace('Bearer ', '');
-    
-    console.log('Auth debug:', { 
-        authHeader: authHeader ? 'present' : 'missing',
-        token: token ? `${token.substring(0, 10)}...` : 'none',
-        headerKeys: Object.keys(headers),
-        allHeaders: headers
-    });
-    
     const isAuthenticated = verifyToken(token);
     
     try {

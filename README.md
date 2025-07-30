@@ -68,7 +68,7 @@ aws lambda update-function-code --function-name status-app-server-api --zip-file
 
 ### Update Frontend
 ```bash
-aws s3 cp web/index.html s3://status.gamelab.cl/index.html --region us-east-1
+aws s3 cp web/index.html s3://status.example.cl/index.html --region us-east-1
 ```
 
 ### Set Environment Variables
