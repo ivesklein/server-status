@@ -24,6 +24,8 @@
         .nav a.active { color: #2196F3; }
         button { background: #2196F3; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
         button:hover { background: #1976D2; }
+        .login-form { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 400px; margin: 0 auto; }
+        .auth-status { float: right; }
     </style>
 </head>
 <body>
@@ -32,12 +34,30 @@
             <h1>Server Status Dashboard</h1>
             <div class="nav">
                 <a href="#" onclick="showDashboard()" class="active" id="dashboard-link">Dashboard</a>
-                <a href="#" onclick="showAdmin()" id="admin-link">Admin</a>
+                <a href="#" onclick="showAdmin()" id="admin-link" style="display: none;">Admin</a>
+                <div class="auth-status">
+                    <span id="auth-status">Guest Mode</span>
+                    <button onclick="showLogin()" id="login-btn">Login</button>
+                    <button onclick="logout()" id="logout-btn" style="display: none;">Logout</button>
+                </div>
             </div>
         </div>
 
         <div id="dashboard-view">
             <div id="status-list" class="status-list"></div>
+        </div>
+
+        <div id="login-view" style="display: none;">
+            <div class="login-form">
+                <h2>Admin Login</h2>
+                <form id="login-form">
+                    <div style="margin-bottom: 15px;">
+                        <label>Password:</label><br>
+                        <input type="password" id="password" required style="width: 100%; padding: 8px; margin-top: 5px;">
+                    </div>
+                    <button type="submit">Login</button>
+                </form>
+            </div>
         </div>
 
         <div id="admin-view" style="display: none;">
@@ -63,31 +83,52 @@
 
     <script>
         const API_BASE = '/api';
+        let authToken = localStorage.getItem('authToken');
+        
+        function getAuthHeaders() {
+            return authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
+        }
+        
+        function updateAuthUI() {
+            const isLoggedIn = !!authToken;
+            document.getElementById('auth-status').textContent = isLoggedIn ? 'Admin Mode' : 'Guest Mode';
+            document.getElementById('login-btn').style.display = isLoggedIn ? 'none' : 'inline-block';
+            document.getElementById('logout-btn').style.display = isLoggedIn ? 'inline-block' : 'none';
+            document.getElementById('admin-link').style.display = isLoggedIn ? 'inline-block' : 'none';
+        }
         
         async function loadStatus() {
             try {
-                const response = await fetch(`${API_BASE}/status`);
+                const response = await fetch(`${API_BASE}/status`, {
+                    headers: getAuthHeaders()
+                });
                 const servers = await response.json();
+                const isLoggedIn = !!authToken;
                 
                 const list = document.getElementById('status-list');
-                list.innerHTML = servers.map(server => `
-                    <div class="server-row ${server.status.status ? 'status-up' : 'status-down'}">
-                        <img src="https://${new URL(server.url).hostname}/favicon.ico" class="server-favicon" alt="favicon">
-                        <div class="server-info">
-                            <div class="server-col">
-                                <h3 style="margin: 0 0 10px 0;">${server.name}</h3>
-                                <p style="margin: 5px 0;">${server.url}</p>
+                list.innerHTML = servers.map(server => {
+                    const statusClass = server.status ? 'status-up' : 'status-down';
+                    const favicon = server.url ? `https://${new URL(server.url).hostname}/favicon.ico` : '';
+                    
+                    return `
+                        <div class="server-row ${statusClass}">
+                            ${favicon ? `<img src="${favicon}" class="server-favicon" alt="favicon">` : '<div class="server-favicon"></div>'}
+                            <div class="server-info">
+                                <div class="server-col">
+                                    <h3 style="margin: 0 0 10px 0;">${server.name}</h3>
+                                    ${server.url ? `<p style="margin: 5px 0;">${server.url}</p>` : ''}
+                                </div>
+                                <div class="server-col">
+                                    ${isLoggedIn && server.responseTime !== undefined ? `<p style="margin: 0 0 10px 0;"><strong>Response Time:</strong> ${server.responseTime}ms</p>` : ''}
+                                    <p style="margin: 5px 0;"><strong>Last Check:</strong> ${server.timestamp ? new Date(server.timestamp).toLocaleString() : 'Never'}</p>
+                                </div>
                             </div>
-                            <div class="server-col">
-                                <p style="margin: 0 0 10px 0;"><strong>Response Time:</strong> ${server.status.responseTime || 0}ms</p>
-                                <p style="margin: 5px 0;"><strong>Last Check:</strong> ${server.status.timestamp ? new Date(server.status.timestamp).toLocaleString() : 'Never'}</p>
-                            </div>
+                            ${isLoggedIn ? `<div class="server-chart"><canvas id="chart-${server.id}" width="300" height="70"></canvas></div>` : ''}
                         </div>
-                        <div class="server-chart">
-                            <canvas id="chart-${server.id}" width="300" height="70"></canvas>
-                        </div>
-                    </div>
-                `).join('');
+                    `;
+                }).join('');
+                
+                if (isLoggedIn) loadCharts();
             } catch (error) {
                 console.error('Error loading status:', error);
             }
@@ -95,7 +136,9 @@
         
         async function loadServers() {
             try {
-                const response = await fetch(`${API_BASE}/servers`);
+                const response = await fetch(`${API_BASE}/servers`, {
+                    headers: getAuthHeaders()
+                });
                 const servers = await response.json();
                 
                 const list = document.getElementById('server-list');
@@ -122,7 +165,7 @@
             try {
                 await fetch(`${API_BASE}/servers`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                     body: JSON.stringify({ name, url })
                 });
                 
@@ -139,7 +182,10 @@
             if (!confirm('Are you sure you want to delete this server?')) return;
             
             try {
-                await fetch(`${API_BASE}/servers/${id}`, { method: 'DELETE' });
+                await fetch(`${API_BASE}/servers/${id}`, { 
+                    method: 'DELETE',
+                    headers: getAuthHeaders()
+                });
                 loadServers();
                 alert('Server deleted successfully!');
             } catch (error) {
@@ -151,29 +197,76 @@
         function showDashboard() {
             document.getElementById('dashboard-view').style.display = 'block';
             document.getElementById('admin-view').style.display = 'none';
+            document.getElementById('login-view').style.display = 'none';
             document.getElementById('dashboard-link').classList.add('active');
             document.getElementById('admin-link').classList.remove('active');
-            loadStatus().then(() => loadCharts());
+            loadStatus();
         }
         
         function showAdmin() {
             document.getElementById('dashboard-view').style.display = 'none';
             document.getElementById('admin-view').style.display = 'block';
+            document.getElementById('login-view').style.display = 'none';
             document.getElementById('dashboard-link').classList.remove('active');
             document.getElementById('admin-link').classList.add('active');
             loadServers();
         }
         
+        function showLogin() {
+            document.getElementById('dashboard-view').style.display = 'none';
+            document.getElementById('admin-view').style.display = 'none';
+            document.getElementById('login-view').style.display = 'block';
+        }
+        
+        async function login(event) {
+            event.preventDefault();
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    authToken = data.token;
+                    localStorage.setItem('authToken', authToken);
+                    updateAuthUI();
+                    showDashboard();
+                    alert('Login successful!');
+                } else {
+                    alert('Invalid password');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                alert('Login failed');
+            }
+        }
+        
+        function logout() {
+            authToken = null;
+            localStorage.removeItem('authToken');
+            updateAuthUI();
+            showDashboard();
+        }
+        
         document.getElementById('add-server-form').addEventListener('submit', addServer);
+        document.getElementById('login-form').addEventListener('submit', login);
+        
+        updateAuthUI();
         
         async function loadCharts() {
-            const servers = await (await fetch(`${API_BASE}/status`)).json();
+            if (!authToken) return;
+            
+            const servers = await (await fetch(`${API_BASE}/status`, { headers: getAuthHeaders() })).json();
             const allHistory = [];
             const threeHoursAgo = Date.now() - (3 * 60 * 60 * 1000);
             
             // Load and filter history data to last 3 hours
             for (const server of servers) {
-                const history = await (await fetch(`${API_BASE}/history/${server.id}`)).json();
+                const history = await (await fetch(`${API_BASE}/history/${server.id}`, { headers: getAuthHeaders() })).json();
                 const filtered = history.filter(h => new Date(h.timestamp).getTime() >= threeHoursAgo);
                 allHistory.push({ serverId: server.id, data: filtered });
             }
@@ -245,10 +338,8 @@
         }
         
         // Load initial data
-        loadStatus().then(() => loadCharts());
-        setInterval(() => {
-            loadStatus().then(() => loadCharts());
-        }, 30000);
+        loadStatus();
+        setInterval(loadStatus, 300000);
     </script>
 </body>
 </html>

@@ -53,3 +53,36 @@ A serverless application that monitors server status using AWS Lambda, DynamoDB,
 - Servers are pinged every 5 minutes
 - Status changes trigger SNS notifications
 - All status data is stored in DynamoDB for history
+
+## Manual Deployment
+
+To deploy code changes manually:
+
+### Update Lambda Function
+```bash
+cd src
+zip -r ../api-function-updated.zip .
+cd ..
+aws lambda update-function-code --function-name status-app-server-api --zip-file fileb://api-function-updated.zip --region us-east-1
+```
+
+### Update Frontend
+```bash
+aws s3 cp web/index.html s3://status.gamelab.cl/index.html --region us-east-1
+```
+
+### Set Environment Variables
+```bash
+aws lambda update-function-configuration --function-name status-app-server-api --environment Variables='{SERVERS_TABLE=status-app-servers,STATUS_TABLE=status-app-server-status,JWT_SECRET=your-jwt-secret,ADMIN_PASSWORD=your-admin-password}' --region us-east-1
+```
+
+
+# Issues:
+
+403 Forbidden Error from cloudfront <Error> <Code>AccessDenied</Code> <Message>Access Denied</Message> </Error>
+- Legacy cache settings
+ Solution: Cache policy and origin request policy - All something
+
+{"message":"Missing Authentication Token"}
+- Cloudfront Path Pattern is only a filter, the path is passed unmodified so apigateway receiver the api part too
+ Solution: modify the apigateway adding the api resourse at root
