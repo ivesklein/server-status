@@ -1,23 +1,26 @@
-const AWS = require('aws-sdk');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, PutCommand, ScanCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
 const https = require('https');
 const http = require('http');
 
-const dynamodb = new AWS.DynamoDB.DocumentClient();
-const sns = new AWS.SNS();
+const client = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(client);
+const sns = new SNSClient({});
 
 exports.handler = async (event) => {
     try {
         // Get all servers from DynamoDB
-        const servers = await dynamodb.scan({
+        const servers = await dynamodb.send(new ScanCommand({
             TableName: process.env.SERVERS_TABLE
-        }).promise();
+        }));
 
         for (const server of servers.Items) {
             const status = await pingServer(server.url);
             const timestamp = Date.now();
             
             // Store status in DynamoDB
-            await dynamodb.put({
+            await dynamodb.send(new PutCommand({
                 TableName: process.env.STATUS_TABLE,
                 Item: {
                     serverId: server.id,
@@ -26,7 +29,7 @@ exports.handler = async (event) => {
                     responseTime: status.responseTime,
                     statusCode: status.statusCode
                 }
-            }).promise();
+            }));
 
             // Check if status changed
             const lastStatus = await getLastStatus(server.id);
@@ -81,13 +84,13 @@ async function pingServer(url) {
 
 async function getLastStatus(serverId) {
     try {
-        const result = await dynamodb.query({
+        const result = await dynamodb.send(new QueryCommand({
             TableName: process.env.STATUS_TABLE,
             KeyConditionExpression: 'serverId = :serverId',
             ExpressionAttributeValues: { ':serverId': serverId },
             ScanIndexForward: false,
             Limit: 2
-        }).promise();
+        }));
         
         return result.Items[1]; // Second most recent
     } catch (error) {
@@ -98,9 +101,9 @@ async function getLastStatus(serverId) {
 async function sendAlert(server, isUp) {
     const message = `Server ${server.name} (${server.url}) is now ${isUp ? 'UP' : 'DOWN'}`;
     
-    await sns.publish({
+    await sns.send(new PublishCommand({
         TopicArn: process.env.SNS_TOPIC,
         Message: message,
         Subject: `Server Alert: ${server.name}`
-    }).promise();
+    }));
 }

@@ -8,8 +8,11 @@
         body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
         .container { max-width: 1200px; margin: 0 auto; }
         .header { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
-        .server-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .status-list { display: flex; flex-direction: column; gap: 15px; }
+        .server-row { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; }
+        .server-info { flex: 1; display: flex; gap: 40px; }
+        .server-col { flex: 1; }
+        .server-chart { width: 300px; height: 80px; margin-left: 20px; }
         .status-up { border-left: 4px solid #4CAF50; }
         .status-down { border-left: 4px solid #f44336; }
         .status-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
@@ -33,7 +36,7 @@
         </div>
 
         <div id="dashboard-view">
-            <div id="status-grid" class="status-grid"></div>
+            <div id="status-list" class="status-list"></div>
         </div>
 
         <div id="admin-view" style="display: none;">
@@ -65,18 +68,22 @@
                 const response = await fetch(`${API_BASE}/status`);
                 const servers = await response.json();
                 
-                const grid = document.getElementById('status-grid');
-                grid.innerHTML = servers.map(server => `
-                    <div class="server-card ${server.status.status ? 'status-up' : 'status-down'}">
-                        <h3>${server.name}</h3>
-                        <p><strong>URL:</strong> ${server.url}</p>
-                        <p>
-                            <span class="status-indicator ${server.status.status ? 'up' : 'down'}"></span>
-                            Status: ${server.status.status ? 'UP' : 'DOWN'}
-                        </p>
-                        <p><strong>Response Time:</strong> ${server.status.responseTime || 0}ms</p>
-                        <p><strong>Last Check:</strong> ${server.status.timestamp ? new Date(server.status.timestamp).toLocaleString() : 'Never'}</p>
-                        <canvas id="chart-${server.id}" width="280" height="100" style="margin-top: 10px; border: 1px solid #ddd;"></canvas>
+                const list = document.getElementById('status-list');
+                list.innerHTML = servers.map(server => `
+                    <div class="server-row ${server.status.status ? 'status-up' : 'status-down'}">
+                        <div class="server-info">
+                            <div class="server-col">
+                                <h3 style="margin: 0 0 10px 0;">${server.name}</h3>
+                                <p style="margin: 5px 0;">${server.url}</p>
+                            </div>
+                            <div class="server-col">
+                                <p style="margin: 0 0 10px 0;"><strong>Response Time:</strong> ${server.status.responseTime || 0}ms</p>
+                                <p style="margin: 5px 0;"><strong>Last Check:</strong> ${server.status.timestamp ? new Date(server.status.timestamp).toLocaleString() : 'Never'}</p>
+                            </div>
+                        </div>
+                        <div class="server-chart">
+                            <canvas id="chart-${server.id}" width="300" height="80"></canvas>
+                        </div>
                     </div>
                 `).join('');
             } catch (error) {
@@ -159,14 +166,26 @@
         
         async function loadCharts() {
             const servers = await (await fetch(`${API_BASE}/status`)).json();
+            const allHistory = [];
+            const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000);
             
+            // Load and filter history data to last 30 minutes
             for (const server of servers) {
                 const history = await (await fetch(`${API_BASE}/history/${server.id}`)).json();
-                drawChart(server.id, history);
+                const filtered = history.filter(h => new Date(h.timestamp).getTime() >= thirtyMinutesAgo);
+                allHistory.push({ serverId: server.id, data: filtered });
+            }
+            
+            // Calculate global max for consistent scaling
+            const globalMax = Math.max(...allHistory.flatMap(h => h.data.map(d => d.responseTime)));
+            
+            // Draw all charts with consistent scaling and time range
+            for (const { serverId, data } of allHistory) {
+                drawChart(serverId, data, globalMax, thirtyMinutesAgo);
             }
         }
         
-        function drawChart(serverId, data) {
+        function drawChart(serverId, data, globalMax, startTime) {
             const canvas = document.getElementById(`chart-${serverId}`);
             if (!canvas) return;
             
@@ -176,18 +195,20 @@
             
             ctx.clearRect(0, 0, width, height);
             
-            if (data.length < 2) return;
+            if (data.length < 1) return;
             
-            const maxTime = Math.max(...data.map(d => d.responseTime));
-            const minTime = Math.min(...data.map(d => d.responseTime));
+            const minTime = 0;
+            const maxTime = globalMax || Math.max(...data.map(d => d.responseTime));
             const range = maxTime - minTime || 1;
+            const timeRange = 30 * 60 * 1000; // 30 minutes
             
             ctx.strokeStyle = '#2196F3';
             ctx.lineWidth = 2;
             ctx.beginPath();
             
             data.forEach((point, i) => {
-                const x = (i / (data.length - 1)) * width;
+                const pointTime = new Date(point.timestamp).getTime();
+                const x = ((pointTime - startTime) / timeRange) * width;
                 const y = height - ((point.responseTime - minTime) / range) * height;
                 
                 if (i === 0) ctx.moveTo(x, y);
@@ -199,7 +220,7 @@
             // Add labels
             ctx.fillStyle = '#666';
             ctx.font = '10px Arial';
-            ctx.fillText(`${minTime}ms`, 5, height - 5);
+            ctx.fillText('0ms', 5, height - 5);
             ctx.fillText(`${maxTime}ms`, 5, 15);
         }
         

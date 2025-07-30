@@ -1,26 +1,31 @@
-const AWS = require('aws-sdk');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, ScanCommand, PutCommand, DeleteCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { v4: uuidv4 } = require('uuid');
 
-const dynamodb = new AWS.DynamoDB.DocumentClient();
+const client = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(client);
 
 exports.handler = async (event) => {
     const { httpMethod, path, pathParameters, body } = event;
     
     try {
-        switch (`${httpMethod} ${path}`) {
-            case 'GET /servers':
-                return await getServers();
-            case 'POST /servers':
-                return await addServer(JSON.parse(body));
-            case 'DELETE /servers/{id}':
-                return await deleteServer(pathParameters.id);
-            case 'GET /status':
-                return await getStatus();
-            case 'GET /history/{id}':
-                return await getHistory(pathParameters.id);
-            default:
-                return { statusCode: 404, body: 'Not found' };
+        if (httpMethod === 'GET' && (path === '/servers' || path === '/api/servers')) {
+            return await getServers();
         }
+        if (httpMethod === 'POST' && (path === '/servers' || path === '/api/servers')) {
+            return await addServer(JSON.parse(body));
+        }
+        if (httpMethod === 'DELETE' && (path.startsWith('/servers/') || path.startsWith('/api/servers/'))) {
+            return await deleteServer(pathParameters.id);
+        }
+        if (httpMethod === 'GET' && (path === '/status' || path === '/api/status')) {
+            return await getStatus();
+        }
+        if (httpMethod === 'GET' && (path.startsWith('/history/') || path.startsWith('/api/history/'))) {
+            return await getHistory(pathParameters.id);
+        }
+        
+        return { statusCode: 404, body: `Not found ${httpMethod} ${path}` };
     } catch (error) {
         console.error('Error:', error);
         return { 
@@ -32,9 +37,9 @@ exports.handler = async (event) => {
 };
 
 async function getServers() {
-    const result = await dynamodb.scan({
+    const result = await dynamodb.send(new ScanCommand({
         TableName: process.env.SERVERS_TABLE
-    }).promise();
+    }));
     
     return {
         statusCode: 200,
@@ -51,10 +56,10 @@ async function addServer(server) {
         createdAt: Date.now()
     };
     
-    await dynamodb.put({
+    await dynamodb.send(new PutCommand({
         TableName: process.env.SERVERS_TABLE,
         Item: item
-    }).promise();
+    }));
     
     return {
         statusCode: 201,
@@ -64,10 +69,10 @@ async function addServer(server) {
 }
 
 async function deleteServer(id) {
-    await dynamodb.delete({
+    await dynamodb.send(new DeleteCommand({
         TableName: process.env.SERVERS_TABLE,
         Key: { id }
-    }).promise();
+    }));
     
     return {
         statusCode: 200,
@@ -78,19 +83,19 @@ async function deleteServer(id) {
 
 async function getStatus() {
     // Get all servers
-    const servers = await dynamodb.scan({
+    const servers = await dynamodb.send(new ScanCommand({
         TableName: process.env.SERVERS_TABLE
-    }).promise();
+    }));
     
     // Get latest status for each server
     const statusPromises = servers.Items.map(async (server) => {
-        const status = await dynamodb.query({
+        const status = await dynamodb.send(new QueryCommand({
             TableName: process.env.STATUS_TABLE,
             KeyConditionExpression: 'serverId = :serverId',
             ExpressionAttributeValues: { ':serverId': server.id },
             ScanIndexForward: false,
             Limit: 1
-        }).promise();
+        }));
         
         return {
             ...server,
@@ -108,13 +113,13 @@ async function getStatus() {
 }
 
 async function getHistory(serverId) {
-    const result = await dynamodb.query({
+    const result = await dynamodb.send(new QueryCommand({
         TableName: process.env.STATUS_TABLE,
         KeyConditionExpression: 'serverId = :serverId',
         ExpressionAttributeValues: { ':serverId': serverId },
         ScanIndexForward: false,
         Limit: 50
-    }).promise();
+    }));
     
     return {
         statusCode: 200,

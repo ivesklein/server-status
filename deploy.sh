@@ -14,11 +14,10 @@ fi
 
 echo "Found certificate: $CERT_ARN"
 echo "Deploying application..."
-sam deploy --parameter-overrides CertificateArn=$CERT_ARN
+sam deploy --stack-name statusApp --parameter-overrides CertificateArn=$CERT_ARN --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --resolve-s3 --confirm-changeset --region us-east-1
 
-# Get the S3 bucket name from CloudFormation outputs
-STACK_NAME=$(grep "stack_name" samconfig.toml | cut -d'"' -f2)
-BUCKET_NAME="${STACK_NAME}-website"
+# Use the domain name as bucket name
+BUCKET_NAME="status.gamelab.cl"
 
 echo "Uploading website files to S3..."
 aws s3 sync web/ s3://$BUCKET_NAME/

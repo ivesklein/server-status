@@ -4,6 +4,7 @@ Transform: AWS::Serverless-2016-10-31
 Parameters:
   AdminEmail:
     Type: String
+    Default: dvdklein@gmail.com
     Description: Email for SNS notifications
   DomainName:
     Type: String
@@ -18,7 +19,7 @@ Resources:
   ServersTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: servers
+      TableName: status-app-servers
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: id
@@ -30,7 +31,7 @@ Resources:
   StatusTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: server-status
+      TableName: status-app-server-status
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: serverId
@@ -47,7 +48,7 @@ Resources:
   AlertTopic:
     Type: AWS::SNS::Topic
     Properties:
-      TopicName: server-alerts
+      TopicName: status-app-server-alerts
       Subscription:
         - Protocol: email
           Endpoint: !Ref AdminEmail
@@ -56,7 +57,7 @@ Resources:
   WebsiteBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "${AWS::StackName}-website"
+      BucketName: !Ref DomainName
       WebsiteConfiguration:
         IndexDocument: index.html
       PublicAccessBlockConfiguration:
@@ -123,7 +124,7 @@ Resources:
   PingFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: server-ping
+      FunctionName: status-app-server-ping
       CodeUri: src/
       Handler: ping.handler
       Runtime: nodejs18.x
@@ -148,7 +149,7 @@ Resources:
   ApiFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: server-api
+      FunctionName: status-app-server-api
       CodeUri: src/
       Handler: api.handler
       Runtime: nodejs18.x
