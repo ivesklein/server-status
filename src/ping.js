@@ -20,15 +20,22 @@ exports.handler = async (event) => {
             const timestamp = Date.now();
             
             // Store status in DynamoDB
+            const item = {
+                serverId: server.id,
+                timestamp,
+                status: status.isUp,
+                responseTime: status.responseTime,
+                statusCode: status.statusCode
+            };
+            
+            // Add extra data if available
+            if (status.activity !== undefined) item.activity = status.activity;
+            if (status.activeGames !== undefined) item.activeGames = status.activeGames;
+            if (status.runningMatches !== undefined) item.runningMatches = status.runningMatches;
+            
             await dynamodb.send(new PutCommand({
                 TableName: process.env.STATUS_TABLE,
-                Item: {
-                    serverId: server.id,
-                    timestamp,
-                    status: status.isUp,
-                    responseTime: status.responseTime,
-                    statusCode: status.statusCode
-                }
+                Item: item
             }));
 
             // Check if status changed
@@ -56,10 +63,27 @@ async function pingServer(url) {
             }
         }, (res) => {
             const responseTime = Date.now() - startTime;
-            resolve({
-                isUp: res.statusCode < 400,
-                responseTime,
-                statusCode: res.statusCode
+            let body = '';
+            
+            res.on('data', chunk => body += chunk);
+            res.on('end', () => {
+                const result = {
+                    isUp: res.statusCode < 400,
+                    responseTime,
+                    statusCode: res.statusCode
+                };
+                
+                // Try to parse JSON and extract additional data
+                try {
+                    const jsonData = JSON.parse(body);
+                    if (jsonData.activity !== undefined) result.activity = jsonData.activity;
+                    if (jsonData.activeGames !== undefined) result.activeGames = jsonData.activeGames.length;
+                    if (jsonData.running_matches !== undefined) result.runningMatches = jsonData.running_matches;
+                } catch (e) {
+                    // Not JSON or parsing failed, continue without extra data
+                }
+                
+                resolve(result);
             });
         });
 

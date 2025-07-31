@@ -163,6 +163,9 @@ async function getStatus(isAuthenticated) {
         if (isAuthenticated) {
             serverData.url = server.url;
             serverData.responseTime = status.Items[0]?.responseTime || 0;
+            if (status.Items[0]?.activity !== undefined) serverData.activity = status.Items[0].activity;
+            if (status.Items[0]?.activeGames !== undefined) serverData.activeGames = status.Items[0].activeGames;
+            if (status.Items[0]?.runningMatches !== undefined) serverData.runningMatches = status.Items[0].runningMatches;
         }
         
         return serverData;
