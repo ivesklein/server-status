@@ -81,6 +81,7 @@
         </div>
     </div>
 
+    <script src="charts.js"></script>
     <script>
         const API_BASE = '/api';
         let authToken = localStorage.getItem('authToken');
@@ -120,9 +121,6 @@
                                 </div>
                                 <div class="server-col">
                                     ${isLoggedIn && server.responseTime !== undefined ? `<p style="margin: 0 0 10px 0;"><strong>Response Time:</strong> ${server.responseTime}ms</p>` : ''}
-                                    ${isLoggedIn && server.activity !== undefined ? `<p style="margin: 0 0 10px 0;"><strong>Activity:</strong> ${server.activity}</p>` : ''}
-                                    ${isLoggedIn && server.activeGames !== undefined ? `<p style="margin: 0 0 10px 0;"><strong>Active Games:</strong> ${server.activeGames}</p>` : ''}
-                                    ${isLoggedIn && server.runningMatches !== undefined ? `<p style="margin: 0 0 10px 0;"><strong>Running Matches:</strong> ${server.runningMatches}</p>` : ''}
                                     <p style="margin: 5px 0;"><strong>Last Check:</strong> ${server.timestamp ? new Date(server.timestamp).toLocaleString() : 'Never'}</p>
                                 </div>
                             </div>
@@ -267,176 +265,26 @@
             const allHistory = [];
             const threeHoursAgo = Date.now() - (3 * 60 * 60 * 1000);
             
-            // Load and filter history data to last 3 hours
             for (const server of servers) {
                 const history = await (await fetch(`${API_BASE}/history/${server.id}`, { headers: getAuthHeaders() })).json();
                 const filtered = history.filter(h => new Date(h.timestamp).getTime() >= threeHoursAgo);
                 allHistory.push({ serverId: server.id, data: filtered });
             }
             
-            // Calculate global max for consistent scaling
             const globalMaxResponse = Math.max(...allHistory.flatMap(h => h.data.map(d => d.responseTime)));
             const globalMaxActivity = Math.max(...allHistory.flatMap(h => h.data.filter(d => d.activity !== undefined).map(d => d.activity)));
             const globalMaxGames = Math.max(...allHistory.flatMap(h => h.data.filter(d => d.activeGames !== undefined).map(d => d.activeGames)));
             const globalMaxMatches = Math.max(...allHistory.flatMap(h => h.data.filter(d => d.runningMatches !== undefined).map(d => d.runningMatches)));
             
-            // Draw all charts with consistent scaling and time range
             for (const { serverId, data } of allHistory) {
                 drawChart(serverId, data, { response: globalMaxResponse, activity: globalMaxActivity, games: globalMaxGames, matches: globalMaxMatches }, threeHoursAgo);
             }
         }
         
-        function drawChart(serverId, data, globalMax, startTime) {
-            const canvas = document.getElementById(`chart-${serverId}`);
-            if (!canvas) return;
-            
-            const ctx = canvas.getContext('2d');
-            const width = canvas.width;
-            const height = canvas.height;
-            
-            ctx.clearRect(0, 0, width, height);
-            
-            if (data.length < 1) return;
-            
-            const timeRange = 3 * 60 * 60 * 1000; // 3 hours
-            
-            // Draw grid
-            ctx.strokeStyle = '#e0e0e0';
-            ctx.lineWidth = 1;
-            for (let i = 1; i < 4; i++) {
-                const y = (i / 4) * height;
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(width, y);
-                ctx.stroke();
-            }
-            for (let i = 1; i < 6; i++) {
-                const x = (i / 6) * width;
-                ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, height);
-                ctx.stroke();
-            }
-            
-            // Draw response time (blue)
-            const maxResponse = globalMax.response || Math.max(...data.map(d => d.responseTime));
-            if (maxResponse > 0) {
-                ctx.strokeStyle = '#2196F3';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                
-                data.forEach((point, i) => {
-                    const pointTime = new Date(point.timestamp).getTime();
-                    const x = ((pointTime - startTime) / timeRange) * width;
-                    const y = height - (point.responseTime / maxResponse) * height;
-                    
-                    if (i === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                });
-                
-                ctx.stroke();
-            }
-            
-            // Draw activity (green) if available
-            const activityData = data.filter(d => d.activity !== undefined);
-            if (activityData.length > 0) {
-                const maxActivity = globalMax.activity || Math.max(...activityData.map(d => d.activity));
-                if (maxActivity > 0) {
-                    ctx.strokeStyle = '#4CAF50';
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    
-                    activityData.forEach((point, i) => {
-                        const pointTime = new Date(point.timestamp).getTime();
-                        const x = ((pointTime - startTime) / timeRange) * width;
-                        const y = height - (point.activity / maxActivity) * height;
-                        
-                        if (i === 0) ctx.moveTo(x, y);
-                        else ctx.lineTo(x, y);
-                    });
-                    
-                    ctx.stroke();
-                }
-            }
-            
-            // Draw active games (orange) if available
-            const gamesData = data.filter(d => d.activeGames !== undefined);
-            if (gamesData.length > 0) {
-                const maxGames = globalMax.games || Math.max(...gamesData.map(d => d.activeGames));
-                if (maxGames > 0) {
-                    ctx.strokeStyle = '#FF9800';
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    
-                    gamesData.forEach((point, i) => {
-                        const pointTime = new Date(point.timestamp).getTime();
-                        const x = ((pointTime - startTime) / timeRange) * width;
-                        const y = height - (point.activeGames / maxGames) * height;
-                        
-                        if (i === 0) ctx.moveTo(x, y);
-                        else ctx.lineTo(x, y);
-                    });
-                    
-                    ctx.stroke();
-                }
-            }
-            
-            // Add labels and legend
-            ctx.fillStyle = '#666';
-            ctx.font = '10px Arial';
-            
-            // Response time legend
-            ctx.fillStyle = '#2196F3';
-            ctx.fillText('Response', 5, 15);
-            ctx.fillStyle = '#666';
-            ctx.fillText(`${maxResponse}ms`, 50, 15);
-            
-            // Activity legend if available
-            if (activityData.length > 0) {
-                ctx.fillStyle = '#4CAF50';
-                ctx.fillText('Activity', 5, 30);
-                ctx.fillStyle = '#666';
-                ctx.fillText(`${globalMax.activity || 0}`, 50, 30);
-            }
-            
-            // Games legend if available
-            if (gamesData.length > 0) {
-                ctx.fillStyle = '#FF9800';
-                ctx.fillText('Games', 5, 45);
-                ctx.fillStyle = '#666';
-                ctx.fillText(`${globalMax.games || 0}`, 50, 45);
-            }
-            
-            // Running matches (purple) if available
-            const matchesData = data.filter(d => d.runningMatches !== undefined);
-            if (matchesData.length > 0) {
-                const maxMatches = globalMax.matches || Math.max(...matchesData.map(d => d.runningMatches));
-                if (maxMatches > 0) {
-                    ctx.strokeStyle = '#9C27B0';
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    
-                    matchesData.forEach((point, i) => {
-                        const pointTime = new Date(point.timestamp).getTime();
-                        const x = ((pointTime - startTime) / timeRange) * width;
-                        const y = height - (point.runningMatches / maxMatches) * height;
-                        
-                        if (i === 0) ctx.moveTo(x, y);
-                        else ctx.lineTo(x, y);
-                    });
-                    
-                    ctx.stroke();
-                }
-                
-                // Matches legend
-                ctx.fillStyle = '#9C27B0';
-                ctx.fillText('Matches', 5, 60);
-                ctx.fillStyle = '#666';
-                ctx.fillText(`${globalMax.matches || 0}`, 50, 60);
-            }
-        }
+
         
-        // Load initial data
+        // Initialize chart hover and load data
+        initChartHover();
         loadStatus();
         setInterval(loadStatus, 300000);
     </script>
