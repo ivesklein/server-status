@@ -155,6 +155,45 @@ function drawChart(serverId, data, globalMax, startTime) {
     canvas.chartData = { data, activityData, gamesData, matchesData, globalMax, startTime, timeRange };
 }
 
+// Debounce function
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// Download function with debounce
+const downloadData = debounce(async (serverId) => {
+    const authToken = localStorage.getItem('authToken');
+    if (!authToken) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/download/${serverId}`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `server-${serverId}-month-data.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }
+    } catch (error) {
+        console.error('Download failed:', error);
+    }
+}, 1000);
+
 // Initialize chart hover functionality
 function initChartHover() {
     document.addEventListener('mousemove', (e) => {
@@ -237,4 +276,6 @@ function initChartHover() {
             }        
         }
     });
+    
+
 }

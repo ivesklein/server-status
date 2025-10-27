@@ -6,6 +6,9 @@ A serverless application that monitors server status using AWS Lambda, DynamoDB,
 
 - **Automated Monitoring**: Pings servers every 5 minutes
 - **Real-time Dashboard**: Shows current status of all servers
+- **SLI Calculation**: Daily Service Level Indicator calculation with color-coded display
+- **Data Export**: Download month of monitoring data as CSV
+- **Interactive Charts**: 3-hour response time and activity charts with hover details
 - **Admin Interface**: Add/remove servers and ping URLs
 - **Alerts**: SNS notifications when servers go up/down
 - **Serverless**: Fully managed AWS infrastructure
@@ -15,7 +18,11 @@ A serverless application that monitors server status using AWS Lambda, DynamoDB,
 - **Lambda Functions**: 
   - `ping.js`: Monitors servers every 5 minutes
   - `api.js`: Handles CRUD operations and status queries
-- **DynamoDB**: Stores server configurations and status history
+  - `sli.js`: Calculates daily SLI metrics for each server
+- **DynamoDB Tables**: 
+  - `status-app-servers`: Server configurations
+  - `status-app-server-status`: Status history and metrics
+  - `status_server_sli`: Service Level Indicator calculations
 - **S3 + CloudFront**: Hosts the web dashboard
 - **SNS**: Sends email alerts for status changes
 
@@ -34,6 +41,9 @@ A serverless application that monitors server status using AWS Lambda, DynamoDB,
 ### Dashboard
 - View real-time status of all monitored servers
 - See response times and last check timestamps
+- **SLI Display**: Color-coded availability percentages (30-day)
+- **Interactive Charts**: Hover for detailed metrics
+- **Data Export**: Download CSV button for historical data
 - Auto-refreshes every 30 seconds
 
 ### Admin Panel
@@ -43,16 +53,22 @@ A serverless application that monitors server status using AWS Lambda, DynamoDB,
 
 ## API Endpoints
 
-- `GET /api/status` - Get current status of all servers
+- `GET /api/status` - Get current status of all servers (includes SLI data when authenticated)
 - `GET /api/servers` - List all configured servers
 - `POST /api/servers` - Add a new server
 - `DELETE /api/servers/{id}` - Remove a server
+- `GET /api/history/{id}` - Get 3-hour history for charts
+- `GET /api/download/{id}` - Download 30-day CSV data (authenticated)
+- `POST /api/login` - Admin authentication
 
 ## Monitoring
 
-- Servers are pinged every 5 minutes
-- Status changes trigger SNS notifications
-- All status data is stored in DynamoDB for history
+- **Ping Frequency**: Every 5 minutes
+- **SLI Calculation**: Daily at midnight
+- **Missing Data Handling**: Gaps treated as downtime in SLI
+- **Alerts**: SNS notifications on status changes
+- **Data Retention**: All status data stored in DynamoDB
+- **SLI Metrics**: 30-day availability percentage with expected vs actual checks
 
 ## Manual Deployment
 
@@ -77,7 +93,9 @@ aws cloudfront create-invalidation --distribution-id ID --paths "/*"
 
 ### Set Environment Variables
 ```bash
-aws lambda update-function-configuration --function-name status-app-server-api --environment Variables='{SERVERS_TABLE=status-app-servers,STATUS_TABLE=status-app-server-status,JWT_SECRET=your-jwt-secret,ADMIN_PASSWORD=your-admin-password}' --region us-east-1
+aws lambda update-function-configuration --function-name status-app-server-api --environment Variables='{SERVERS_TABLE=status-app-servers,STATUS_TABLE=status-app-server-status,SLI_TABLE=status_server_sli,JWT_SECRET=your-jwt-secret,ADMIN_PASSWORD=your-admin-password}' --region us-east-1
+
+aws lambda update-function-configuration --function-name status-app-server-sli --environment Variables='{SERVERS_TABLE=status-app-servers,STATUS_TABLE=status-app-server-status,SLI_TABLE=status_server_sli}' --region us-east-1
 ```
 
 

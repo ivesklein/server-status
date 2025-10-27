@@ -34,6 +34,9 @@ exports.handler = async (event) => {
         if (httpMethod === 'GET' && (path.startsWith('/history/') || path.startsWith('/api/history/'))) {
             return requireAuth(isAuthenticated, () => getHistory(pathParameters.id));
         }
+        if (httpMethod === 'GET' && (path.startsWith('/download/') || path.startsWith('/api/download/'))) {
+            return requireAuth(isAuthenticated, () => downloadMonthData(pathParameters.id));
+        }
         
         return { statusCode: 404, body: `Not found ${httpMethod} ${path}` };
     } catch (error) {
@@ -166,6 +169,25 @@ async function getStatus(isAuthenticated) {
             if (status.Items[0]?.activity !== undefined) serverData.activity = status.Items[0].activity;
             if (status.Items[0]?.activeGames !== undefined) serverData.activeGames = status.Items[0].activeGames;
             if (status.Items[0]?.runningMatches !== undefined) serverData.runningMatches = status.Items[0].runningMatches;
+            
+            // Get latest SLI data
+            try {
+                const sli = await dynamodb.send(new QueryCommand({
+                    TableName: process.env.SLI_TABLE,
+                    KeyConditionExpression: 'serverId = :serverId',
+                    ExpressionAttributeValues: { ':serverId': server.id },
+                    ScanIndexForward: false,
+                    Limit: 1
+                }));
+                if (sli.Items[0]) {
+                    serverData.sli = sli.Items[0];
+                    serverData.expectedChecks = sli.Items[0].expectedChecks;
+                    serverData.actualChecks = sli.Items[0].actualChecks;
+                    serverData.successfulChecks = sli.Items[0].successfulChecks;
+                }
+            } catch (error) {
+                console.log('SLI table not available:', error.message);
+            }
         }
         
         return serverData;
@@ -198,5 +220,40 @@ async function getHistory(serverId) {
         statusCode: 200,
         body: JSON.stringify(result.Items.reverse()),
         headers: { 'Content-Type': 'application/json' }
+    };
+}
+
+async function downloadMonthData(serverId) {
+    const oneMonthAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    
+    const result = await dynamodb.send(new QueryCommand({
+        TableName: process.env.STATUS_TABLE,
+        KeyConditionExpression: 'serverId = :serverId AND #timestamp >= :oneMonthAgo',
+        ExpressionAttributeNames: { '#timestamp': 'timestamp' },
+        ExpressionAttributeValues: { 
+            ':serverId': serverId,
+            ':oneMonthAgo': oneMonthAgo
+        },
+        ScanIndexForward: false
+    }));
+    
+    const csv = 'timestamp,status,responseTime,statusCode,activity,activeGames,runningMatches\n' +
+        result.Items.map(item => [
+            new Date(item.timestamp).toISOString(),
+            item.status,
+            item.responseTime || 0,
+            item.statusCode || 0,
+            item.activity || '',
+            item.activeGames || '',
+            item.runningMatches || ''
+        ].join(',')).join('\n');
+    
+    return {
+        statusCode: 200,
+        body: csv,
+        headers: { 
+            'Content-Type': 'text/csv',
+            'Content-Disposition': `attachment; filename="server-${serverId}-month-data.csv"`
+        }
     };
 }

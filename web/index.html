@@ -13,7 +13,14 @@
         .server-favicon { width: 20px; height: 20px; margin: 0 15px; flex-shrink: 0; }
         .server-info { flex: 1; display: flex; gap: 40px; }
         .server-col { flex: 1; }
-        .server-chart { width: 300px; height: 70px; margin-left: 20px; }
+        .server-chart { display: flex; align-items: center; margin-left: 20px; }
+        .server-chart canvas { cursor: crosshair; margin-right: 10px; }
+        .server-sli { width: 120px; text-align: center; margin-left: 20px; padding: 10px; }
+        .sli-percentage { font-size: 24px; font-weight: bold; margin: 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+        .sli-details { font-size: 12px; color: #666; margin: 5px 0 0 0; }
+        .download-btn { background: #4CAF50; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; margin-left: 10px; }
+        .download-btn:hover { background: #45a049; }
+        .download-btn:disabled { background: #ccc; cursor: not-allowed; }
         .status-up { border-left: 4px solid #4CAF50; }
         .status-down { border-left: 4px solid #f44336; }
         .status-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
@@ -86,7 +93,25 @@
         const API_BASE = '/api';
         let authToken = localStorage.getItem('authToken');
         
+        function isTokenExpired(token) {
+            if (!token) return true;
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                return payload.exp * 1000 < Date.now();
+            } catch {
+                return true;
+            }
+        }
+        
+        function checkTokenExpiration() {
+            if (authToken && isTokenExpired(authToken)) {
+                logout();
+                alert('Session expired. Please login again.');
+            }
+        }
+        
         function getAuthHeaders() {
+            checkTokenExpiration();
             return authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
         }
         
@@ -124,7 +149,8 @@
                                     <p style="margin: 5px 0;"><strong>Last Check:</strong> ${server.timestamp ? new Date(server.timestamp).toLocaleString() : 'Never'}</p>
                                 </div>
                             </div>
-                            ${isLoggedIn ? `<div class="server-chart"><canvas id="chart-${server.id}" width="300" height="70"></canvas></div>` : ''}
+                            ${isLoggedIn ? `<div class="server-chart"><canvas id="chart-${server.id}" width="300" height="70"></canvas><button class="download-btn" onclick="downloadData('${server.id}')">⬇ CSV</button></div>` : ''}
+                            ${isLoggedIn && server.sli ? `<div class="server-sli"><div class="sli-percentage" style="color: ${getSliColor(server.sli.sli)}">${server.sli.sli}%</div><div class="sli-details">SLI ${server.successfulChecks}/${server.expectedChecks}</div></div>` : ''}
                         </div>
                     `;
                 }).join('');
@@ -256,7 +282,49 @@
         document.getElementById('add-server-form').addEventListener('submit', addServer);
         document.getElementById('login-form').addEventListener('submit', login);
         
+        function getSliColor(sli) {
+            if (sli >= 100) return '#4CAF50';
+            if (sli >= 99.99) return '#8BC34A';
+            if (sli >= 99.9) return '#CDDC39';
+            if (sli >= 99.5) return '#FFEB3B';
+            if (sli >= 99) return '#FF9800';
+            if (sli >= 95) return '#f44336';
+            return '#D32F2F';
+        }
+        
+        // Make downloadData function available globally
+        window.downloadData = async function(serverId) {
+            if (!authToken) return;
+            
+            const button = event.target;
+            const originalText = button.innerHTML;
+            button.innerHTML = '⏳ Loading...';
+            button.disabled = true;
+            
+            try {
+                const response = await fetch(`${API_BASE}/download/${serverId}`, { headers: getAuthHeaders() });
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `server-${serverId}-month-data.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                }
+            } catch (error) {
+                console.error('Download failed:', error);
+            } finally {
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        };
+        
         updateAuthUI();
+        checkTokenExpiration();
         
         async function loadCharts() {
             if (!authToken) return;
@@ -287,6 +355,7 @@
         initChartHover();
         loadStatus();
         setInterval(loadStatus, 300000);
+        setInterval(checkTokenExpiration, 60000);
     </script>
 </body>
 </html>
