@@ -203,15 +203,15 @@ async function getStatus(isAuthenticated) {
 }
 
 async function getHistory(serverId) {
-    const threeHoursAgo = Date.now() - (3 * 60 * 60 * 1000);
+    const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
     
     const result = await dynamodb.send(new QueryCommand({
         TableName: process.env.STATUS_TABLE,
-        KeyConditionExpression: 'serverId = :serverId AND #timestamp >= :threeHoursAgo',
+        KeyConditionExpression: 'serverId = :serverId AND #timestamp >= :twentyFourHoursAgo',
         ExpressionAttributeNames: { '#timestamp': 'timestamp' },
         ExpressionAttributeValues: { 
             ':serverId': serverId,
-            ':threeHoursAgo': threeHoursAgo
+            ':twentyFourHoursAgo': twentyFourHoursAgo
         },
         ScanIndexForward: false
     }));

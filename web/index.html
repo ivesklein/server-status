@@ -332,11 +332,11 @@
             
             const servers = await (await fetch(`${API_BASE}/status`, { headers: getAuthHeaders() })).json();
             const allHistory = [];
-            const threeHoursAgo = Date.now() - (3 * 60 * 60 * 1000);
+            const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
             
             for (const server of servers) {
                 const history = await (await fetch(`${API_BASE}/history/${server.id}`, { headers: getAuthHeaders() })).json();
-                const filtered = history.filter(h => new Date(h.timestamp).getTime() >= threeHoursAgo);
+                const filtered = history.filter(h => new Date(h.timestamp).getTime() >= twentyFourHoursAgo);
                 allHistory.push({ serverId: server.id, data: filtered });
             }
             
@@ -346,7 +346,7 @@
             const globalMaxMatches = Math.max(...allHistory.flatMap(h => h.data.filter(d => d.runningMatches !== undefined).map(d => d.runningMatches)));
             
             for (const { serverId, data } of allHistory) {
-                drawChart(serverId, data, { response: globalMaxResponse, activity: globalMaxActivity, games: globalMaxGames, matches: globalMaxMatches }, threeHoursAgo);
+                drawChart(serverId, data, { response: globalMaxResponse, activity: globalMaxActivity, games: globalMaxGames, matches: globalMaxMatches }, twentyFourHoursAgo);
             }
         }
         

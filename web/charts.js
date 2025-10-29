@@ -5,7 +5,7 @@ function drawChart(serverId, data, globalMax, startTime) {
     const ctx = canvas.getContext('2d');
     const width = canvas.width;
     const height = canvas.height;
-    const timeRange = 3 * 60 * 60 * 1000; // 3 hours
+    const timeRange = 24 * 60 * 60 * 1000; // 24 hours
     
     if (data.length < 1) return;
     
@@ -54,7 +54,7 @@ function drawChart(serverId, data, globalMax, startTime) {
     // Draw response time (blue)
     const maxResponse = 200;
     if (maxResponse > 0) {
-        ctx.strokeStyle = '#2196F3';
+        ctx.strokeStyle = 'rgba(33, 150, 243, 0.2)';
         ctx.lineWidth = 2;
         ctx.beginPath();
         
