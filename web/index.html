@@ -149,7 +149,7 @@
                                     <p style="margin: 5px 0;"><strong>Last Check:</strong> ${server.timestamp ? new Date(server.timestamp).toLocaleString() : 'Never'}</p>
                                 </div>
                             </div>
-                            ${isLoggedIn ? `<div class="server-chart"><canvas id="chart-${server.id}" width="300" height="70"></canvas><button class="download-btn" onclick="downloadData('${server.id}')">⬇ CSV</button></div>` : ''}
+                            ${isLoggedIn ? `<div class="server-chart"><canvas id="chart-${server.id}" width="300" height="70"></canvas><button class="download-btn" onclick="downloadData('${server.id}', '${server.name}')">⬇ CSV</button></div>` : ''}
                             ${isLoggedIn && server.sli ? `<div class="server-sli"><div class="sli-percentage" style="color: ${getSliColor(server.sli.sli)}">${server.sli.sli}%</div><div class="sli-details">SLI ${server.successfulChecks}/${server.expectedChecks}</div></div>` : ''}
                         </div>
                     `;
@@ -293,7 +293,7 @@
         }
         
         // Make downloadData function available globally
-        window.downloadData = async function(serverId) {
+        window.downloadData = async function(serverId, serverName) {
             if (!authToken) return;
             
             const button = event.target;
@@ -309,7 +309,8 @@
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `server-${serverId}-month-data.csv`;
+                    const safeServerName = (serverName || serverId).replace(/[^a-zA-Z0-9-_]/g, '_');
+                    a.download = `${safeServerName}-month-data.csv`;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);

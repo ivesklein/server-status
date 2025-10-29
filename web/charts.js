@@ -12,6 +12,27 @@ function drawChart(serverId, data, globalMax, startTime) {
     // Clear canvas
     ctx.clearRect(0, 0, width, height);
     
+    // Draw red background for downtime periods
+    ctx.fillStyle = 'rgba(244, 67, 54, 0.2)';
+    let downStart = null;
+    
+    data.forEach((point, i) => {
+        const pointTime = new Date(point.timestamp).getTime();
+        const x = ((pointTime - startTime) / timeRange) * width;
+        
+        if (!point.status && downStart === null) {
+            downStart = x;
+        } else if (point.status && downStart !== null) {
+            ctx.fillRect(downStart, 0, x - downStart, height);
+            downStart = null;
+        }
+    });
+    
+    // If still down at the end
+    if (downStart !== null) {
+        ctx.fillRect(downStart, 0, width - downStart, height);
+    }
+    
     // Draw grid
     ctx.strokeStyle = '#e0e0e0';
     ctx.lineWidth = 1;
@@ -169,7 +190,7 @@ function debounce(func, wait) {
 }
 
 // Download function with debounce
-const downloadData = debounce(async (serverId) => {
+const downloadData = debounce(async (serverId, serverName) => {
     const authToken = localStorage.getItem('authToken');
     if (!authToken) return;
     
@@ -183,7 +204,8 @@ const downloadData = debounce(async (serverId) => {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `server-${serverId}-month-data.csv`;
+            const safeServerName = (serverName || serverId).replace(/[^a-zA-Z0-9-_]/g, '_');
+            a.download = `${safeServerName}-month-data.csv`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);

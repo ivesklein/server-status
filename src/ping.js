@@ -57,11 +57,18 @@ async function pingServer(url) {
         const startTime = Date.now();
         const client = url.startsWith('https') ? https : http;
         
-        const req = client.get(url, {
+        const options = {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.3'
             }
-        }, (res) => {
+        };
+        
+        // For HTTPS, check certificate validity
+        if (url.startsWith('https')) {
+            options.rejectUnauthorized = false; // We'll handle cert validation manually
+        }
+        
+        const req = client.get(url, options, (res) => {
             const responseTime = Date.now() - startTime;
             let body = '';
             
@@ -87,13 +94,40 @@ async function pingServer(url) {
             });
         });
 
-        req.on('error', () => {
+        req.on('error', (error) => {
+            // Check if it's an SSL certificate error
+            const isSslError = error.code === 'CERT_HAS_EXPIRED' || 
+                              error.code === 'CERT_NOT_YET_VALID' ||
+                              error.code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE';
+            
             resolve({
                 isUp: false,
                 responseTime: Date.now() - startTime,
-                statusCode: 0
+                statusCode: isSslError ? -1 : 0 // Use -1 to indicate SSL error
             });
         });
+        
+        // For HTTPS requests, check certificate expiration
+        if (url.startsWith('https')) {
+            req.on('socket', (socket) => {
+                socket.on('secureConnect', () => {
+                    const cert = socket.getPeerCertificate();
+                    if (cert && cert.valid_to) {
+                        const expiryDate = new Date(cert.valid_to);
+                        const now = new Date();
+                        
+                        if (expiryDate <= now) {
+                            req.destroy();
+                            resolve({
+                                isUp: false,
+                                responseTime: Date.now() - startTime,
+                                statusCode: -1 // SSL certificate expired
+                            });
+                        }
+                    }
+                });
+            });
+        }
 
         req.setTimeout(10000, () => {
             req.destroy();
