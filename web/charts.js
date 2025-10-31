@@ -13,7 +13,7 @@ function drawChart(serverId, data, globalMax, startTime) {
     ctx.clearRect(0, 0, width, height);
     
     // Draw red background for downtime periods
-    ctx.fillStyle = 'rgba(244, 67, 54, 0.2)';
+    ctx.fillStyle = 'rgba(244, 67, 54, 0.3)';
     let downStart = null;
     
     data.forEach((point, i) => {
@@ -23,14 +23,26 @@ function drawChart(serverId, data, globalMax, startTime) {
         if (!point.status && downStart === null) {
             downStart = x;
         } else if (point.status && downStart !== null) {
-            ctx.fillRect(downStart, 0, x - downStart, height);
+            let rectWidth = x - downStart;
+            if (rectWidth < 2) {
+                downStart = Math.max(0, x - 2);
+                rectWidth = 2;
+            }
+            ctx.fillRect(downStart, 0, rectWidth, height);
             downStart = null;
         }
     });
     
+
+    
     // If still down at the end
     if (downStart !== null) {
-        ctx.fillRect(downStart, 0, width - downStart, height);
+        let rectWidth = width - downStart;
+        if (rectWidth < 2) {
+            downStart = Math.max(0, width - 2);
+            rectWidth = 2;
+        }
+        ctx.fillRect(downStart, 0, rectWidth, height);
     }
     
     // Draw grid
